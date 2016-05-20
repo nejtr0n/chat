@@ -7,6 +7,5 @@
  */
 require_once 'vendor/autoload.php';
 
-
 $chat = new Chat\WebsocketServer();
 $chat->start();

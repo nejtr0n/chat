@@ -17,9 +17,9 @@ class WebsocketMaster
     protected $clients = array();
 
 
-    public function __construct(array $workers, $config) {
+    public function __construct(array $workers, array $config) {
         $this->config = $config;
-        $this->clients = $this->workers = $workers;
+        $this->workers = $workers;
         $this->server = stream_socket_server("tcp://{$this->config['host']}:{$this->config['port']}", $errorNumber, $errorString);
 
         if (!$this->server) {
@@ -29,18 +29,30 @@ class WebsocketMaster
 
     public function start() {
         fwrite(STDOUT,"Ready for chat...\r\n");
+        $connects = array();
         while (true)
         {
-            $read = $this->clients;
-            if (false === stream_select($read, $b, $c, null)) {//ожидаем сокеты доступные для чтения (без таймаута)
+            $read = $connects;
+            $read[] = $this->server;
+            $write = $except = null;
+            if (false === stream_select($read, $write, $except, null)) {//ожидаем сокеты доступные для чтения (без таймаута)
                 break;
             }
             if ($read) {
-                var_dump($read);
+                // Пришли данные от клиента
+                if (in_array($this->server, $read)) {//есть новое соединение
+                    if ($conn = stream_socket_accept($this->server, -1))
+                    {
+                        //var_dump(stream_get_meta_data($conn));
+                        $message = fread($conn, 1024);
+                        //var_dump(stream_get_meta_data($conn));
+                        //var_dump(fread($conn, 1024));
+                        echo 'I have received that : '.$message;
+                        //fputs ($conn, "OK\n");
+                        //fclose ($conn);
+                    }
+                }
             }
-
-
-
         }
     }
 }

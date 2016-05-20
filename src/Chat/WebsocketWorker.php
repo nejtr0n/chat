@@ -9,7 +9,7 @@
 namespace Chat;
 
 
-class WebsocketWorker
+abstract class WebsocketWorker
 {
     protected $pid;
 
