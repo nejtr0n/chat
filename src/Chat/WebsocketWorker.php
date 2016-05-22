@@ -9,7 +9,7 @@
 namespace Chat;
 
 
-abstract class WebsocketWorker
+abstract class WebsocketWorker extends Socket
 {
     protected $pid;
 
@@ -20,9 +20,15 @@ abstract class WebsocketWorker
 
     public function start()
     {
-        while (true)
-        {
-            ;
+        while (true) {
+            $read = array ($this->master);
+            $write = $except = null;
+            if (false === stream_select($read, $write, $except, null)) {//ожидаем сокеты доступные для чтения (без таймаута)
+                break;
+            }
+            if ($read) {
+                //echo $this->readBuffer($this->master);
+            }
         }
     }
 

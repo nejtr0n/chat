@@ -18,8 +18,5 @@ class WebsocketHandler extends WebsocketWorker
 
     }
 
-    public function start()
-    {
-        //var_dump($this->pid);
-    }
+
 }

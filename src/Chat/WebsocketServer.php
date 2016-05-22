@@ -15,25 +15,19 @@ namespace Chat;
 class WebsocketServer
 {
     private $workers = 2;
-    private $config = array (
-        'host' => '127.0.0.1',
-        'port' => 8080,
-    );
 
-    public function __construct(array $config = array())
+    public function __construct($workers = 2)
     {
-        if (!empty($config)) {
-            $this->config = $config;
-        }
+        $this->workers = $workers;
     }
 
-    public function start()
+    public function start($config = array())
     {
         fwrite(STDOUT,"Chat server started...\r\n");
         list($pid, $master, $workers) = $this->spawnWorkers(); //создаём дочерние процессы
         if ($pid) {//мастер
-            $WebsocketMaster = new WebsocketMaster($workers, $this->config); //мастер будет пересылать сообщения между воркерами
-            $WebsocketMaster->start();
+            $WebsocketMaster = new WebsocketMaster($config); //мастер будет пересылать сообщения между воркерами
+            $WebsocketMaster->start($workers);
         } else {//воркер
             $WebsocketHandler = new WebsocketHandler($master);
             $WebsocketHandler->start();
@@ -50,7 +44,7 @@ class WebsocketServer
             $pair = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
             $pid = pcntl_fork();//создаём форк
             if ($pid == -1) {
-                die("error: pcntl_fork\r\n");
+                die("Error: pcntl_fork\r\n");
             } elseif ($pid) { //мастер
                 fclose($pair[0]);
                 $workers[$pid] = $pair[1];//один из пары будет в мастере
