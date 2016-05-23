@@ -1,0 +1,12 @@
+docker run --name mongo -p 27017:27017 -v ~/123/datadir:/data/db -d mongo
+use chat;
+db.createUser(
+   {
+     user: "chat",
+     pwd: "chat",
+     roles:
+        [{
+            role: "readWrite", db: "chat"
+        }]
+   }
+);

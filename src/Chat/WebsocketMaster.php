@@ -101,6 +101,7 @@ class WebsocketMaster extends Socket
                 foreach ($read as $read_connection) {
                     //есть новое соединение
                     if ($read_connection == $this->server) {
+                        unset($read[ array_search($this->server, $read)]);
                         if ($conn = stream_socket_accept($this->server, -1)) {
                             $connects[] = $conn;
                             $address = explode(':', stream_socket_get_name($conn, true));
@@ -119,7 +120,6 @@ class WebsocketMaster extends Socket
                                     continue;
                                 }
                             }
-                            unset($read[ array_search($this->server, $read)]);
                         }
                     }
                     // Пришли данные от уже подсоединённых клиентов

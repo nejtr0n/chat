@@ -7,16 +7,18 @@
  */
 
 namespace Chat;
-
+use MongoClient;
 
 abstract class WebsocketWorker extends Socket
 {
     protected $pid;
     protected $master = NULL;
+    protected $mongodb = NULL;
 
     public function __construct($master) {
         $this->master = $master;
         $this->pid = posix_getpid();
+        $this->mongodb = new MongoClient("mongodb://chat:chat@localhost:27017/chat");
     }
 
     public function start()
@@ -28,7 +30,8 @@ abstract class WebsocketWorker extends Socket
                 break;
             }
             if ($read) {
-                var_dump($this->decode($this->readBuffer($this->master)));
+                $this->decode($this->readBuffer($this->master));
+                var_dump($this->mongodb);
             }
         }
     }
@@ -115,9 +118,7 @@ abstract class WebsocketWorker extends Socket
 
     private function decode($data)
     {
-        $payloadLength = '';
-        $mask = '';
-        $unmaskedPayload = '';
+        $mask = $payloadLength = $unmaskedPayload = '';
         $decodedData = array();
 
         // estimate frame type:
