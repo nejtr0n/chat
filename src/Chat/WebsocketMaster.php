@@ -90,60 +90,67 @@ class WebsocketMaster extends Socket
         $connects = array();
         while (true)
         {
-            $read = $this->workers;
+            $read = array_merge($this->workers, $connects);
             $read[] = $this->server;
             $write = $except = null;
             if (false === stream_select($read, $write, $except, null)) {//ожидаем сокеты доступные для чтения (без таймаута)
                 break;
             }
             if ($read) {
-                // Пришли данные от клиента
-                if (in_array($this->server, $read)) {//есть новое соединение
-                    if ($conn = stream_socket_accept($this->server, -1)) {
-                        $address = explode(':', stream_socket_get_name($conn, true));
-                        if(!array_key_exists($address[0], $this->ips)) {
-                            $this->ips[$address[0]] = 0;
-                        }
-                        if (!empty($this->ips[$address[0]]) && $this->ips[$address[0]] > $this->config['limit']) {//блокируем более пяти соединий с одного ip
-                            fwrite(STDOUT,"Error: too many connections from IP: {$address[0]}\r\n");
-                            fclose($conn);
-                        } else {
-                            $this->ips[$address[0]]++;
-                            // Если не было рукопожатия, то выполняем его
-                            if (FALSE === array_search(intval($conn) , $this->handshakes)) {
-                                $this->handshake($this->readBuffer($conn));
-                                $this->handshakes[] = intval($conn);
-                                continue;
+                // Пришли данные от с сокета
+                foreach ($read as $read_connection) {
+                    //есть новое соединение
+                    if ($read_connection == $this->server) {
+                        if ($conn = stream_socket_accept($this->server, -1)) {
+                            $connects[] = $conn;
+                            $address = explode(':', stream_socket_get_name($conn, true));
+                            if(!array_key_exists($address[0], $this->ips)) {
+                                $this->ips[$address[0]] = 0;
                             }
-
-                            // Балансируем нагрузку по воркерам
-                            list($key, $worker) = each($this->workers);
-                            if (end(array_keys($this->workers)) == $key) {
-                                reset($this->workers);
+                            if (!empty($this->ips[$address[0]]) && $this->ips[$address[0]] > $this->config['limit']) {//блокируем более пяти соединий с одного ip
+                                fwrite(STDOUT,"Error: too many connections from IP: {$address[0]}\r\n");
+                                fclose($conn);
+                            } else {
+                                $this->ips[$address[0]]++;
+                                // Если не было рукопожатия, то выполняем его
+                                if (FALSE === array_search(intval($conn) , $this->handshakes)) {
+                                    $this->handshake($conn, $this->readBuffer($conn));
+                                    $this->handshakes[] = intval($conn);
+                                    continue;
+                                }
                             }
-                            fwrite($worker, $this->readBuffer($conn));
+                            unset($read[ array_search($this->server, $read)]);
                         }
-
-
+                    }
+                    // Пришли данные от уже подсоединённых клиентов
+                    if (in_array($read_connection, $connects)) {
+                        $this->sendToWorker($read_connection);
                     }
                 }
-                // Пришли данные от воркеров на клиентов
             }
         }
     }
 
-    private function handshake($data)
+    private function sendToWorker($conn)
+    {
+        // Балансируем нагрузку по воркерам
+        $worker = current($this->workers);
+        $next = next($this->workers);
+        if ($next === false) {
+            reset($this->workers);
+        }
+        fwrite($worker, $this->readBuffer($conn));
+    }
+    private function handshake($resource, $data)
     {
         $lines = explode("\r\n",  $data);
         // check for valid http-header:
-        if(!preg_match('/\AGET (\S+) HTTP\/1.1\z/', $lines[0], $matches))
-        {
+        if(!preg_match('/\AGET (\S+) HTTP\/1.1\z/', $lines[0], $matches)) {
             fwrite(STDOUT, 'Invalid request: ' . $lines[0]);
             $this->sendHttpResponse(400);
-            stream_socket_shutdown($this->server, STREAM_SHUT_RDWR);
+            stream_socket_shutdown($resource, STREAM_SHUT_RDWR);
             return false;
         }
-
         // generate headers array:
         $headers = array();
         foreach($lines as $line) {
@@ -157,10 +164,9 @@ class WebsocketMaster extends Socket
         if(!isset($headers['Sec-WebSocket-Version']) || $headers['Sec-WebSocket-Version'] < 6) {
             fwrite(STDOUT, 'Unsupported websocket version.');
             $this->sendHttpResponse(501);
-            stream_socket_shutdown($this->server, STREAM_SHUT_RDWR);
+            stream_socket_shutdown($resource, STREAM_SHUT_RDWR);
             return false;
         }
-
         // check origin:
         if (!empty($this->config['origin'])) {
             $origin = (isset($headers['Sec-WebSocket-Origin'])) ? $headers['Sec-WebSocket-Origin'] : false;
@@ -168,25 +174,24 @@ class WebsocketMaster extends Socket
             if ($origin === false) {
                 fwrite(STDOUT, 'No origin provided.');
                 $this->sendHttpResponse(401);
-                stream_socket_shutdown($this->server, STREAM_SHUT_RDWR);
+                stream_socket_shutdown($resource, STREAM_SHUT_RDWR);
                 return false;
             }
 
             if (empty($origin)) {
                 fwrite(STDOUT, 'Empty origin provided.');
                 $this->sendHttpResponse(401);
-                stream_socket_shutdown($this->server, STREAM_SHUT_RDWR);
+                stream_socket_shutdown($resource, STREAM_SHUT_RDWR);
                 return false;
             }
 
             if ($this->config['origin'] !== $origin) {
                 fwrite(STDOUT, 'Invalid origin provided.');
                 $this->sendHttpResponse(401);
-                stream_socket_shutdown($this->socket, STREAM_SHUT_RDWR);
+                stream_socket_shutdown($resource, STREAM_SHUT_RDWR);
                 return false;
             }
         }
-
         // do handyshake: (hybi-10)
         $secKey = $headers['Sec-WebSocket-Key'];
         $secAccept = base64_encode(pack('H*', sha1($secKey . '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
@@ -196,14 +201,13 @@ class WebsocketMaster extends Socket
         $response.= "Sec-WebSocket-Accept: " . $secAccept . "\r\n";
         if(isset($headers['Sec-WebSocket-Protocol']) && !empty($headers['Sec-WebSocket-Protocol']))
         {
-            $response.= "Sec-WebSocket-Protocol: " . substr($path, 1) . "\r\n";
+            //$response.= "Sec-WebSocket-Protocol: " . substr($path, 1) . "\r\n";
         }
         $response.= "\r\n";
-        if(false === ($this->server->writeBuffer($this->socket, $response)))
-        {
+        if(false === ($this->writeBuffer($resource, $response))) {
             return false;
         }
-        fwrite(STDOUT, 'Handshake sent');
+        fwrite(STDOUT, "Handshake sent\r\n");
         return true;
     }
 
