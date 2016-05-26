@@ -1,28 +1,88 @@
 <html>
 <head>
     <meta charset="UTF-8" />
-</head>
-<script>
-    var socket = new WebSocket("ws://127.0.0.1:8080");
-    socket.onopen = function() {
-        socket.send("Data");
-    };
-
-    socket.onclose = function(event) {
-        if (event.wasClean) {
-            //alert('Соединение закрыто чисто');
-        } else {
-            //alert('Обрыв соединения'); // например, "убит" процесс сервера
+    <style>
+        .top, .bottom {
+            position: absolute;
+            left: 0;
+            right: 0;
         }
-        //alert('Код: ' + event.code + ' причина: ' + event.reason);
-    };
+        .top {
+            top: 0;
+            height: 50%;
+        }
+        .bottom {
+            bottom: 0;
+            height: 50%;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+</head>
+<body>
+    <div class="top">
+        <h4>chat 1</h4>
+        <p></p>
+        <input type="text">
+        <button type="submit">send</button>
+    </div>
+    <div class="bottom">
+        <h4>chat 2</h4>
+        <p></p>
+        <input type="text">
+        <button type="submit">send</button>
+    </div>
+</body>
+<script>
+    var socket1 = new WebSocket("ws://127.0.0.1:8080");
+    var socket2 = new WebSocket("ws://127.0.0.1:8081");
 
-    socket.onmessage = function(event) {
+
+    socket1.onmessage = function(event) {
         alert("Получены данные " + event.data);
     };
 
-    socket.onerror = function(error) {
+    socket1.onerror = function(error) {
         //alert("Ошибка " + error.message);
     };
+    $('.top button').click(function () {
+        var mess = $('.top input').val().trim();
+        if (mess) {
+            // is empty or whitespace
+            sendMessage(socket1, JSON.stringify({
+                chat: 1,
+                mess: mess
+            }));
+            $( ".top p" ).append( "<span><b>1:</b> " + mess +"</span><br />" );
+            $('.top input').val("");
+
+        }
+    });
+
+    function sendMessage(ws, msg) {
+        // Wait until the state of the socket is not ready and send the message when it is...
+        waitForSocketConnection(ws, function(){
+            console.log("message sent!!!");
+            ws.send(msg);
+        });
+    }
+
+    // Make the function wait until the connection is made...
+    function waitForSocketConnection(socket, callback){
+        setTimeout(
+                function () {
+                    if (socket.readyState === 1) {
+                        console.log("Connection is made")
+                        if(callback != null){
+                            callback();
+                        }
+                        return;
+
+                    } else {
+                        console.log("wait for connection...")
+                        waitForSocketConnection(socket, callback);
+                    }
+
+                }, 5); // wait 5 milisecond for the connection...
+    }
 </script>
 </html>

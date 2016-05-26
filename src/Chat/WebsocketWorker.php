@@ -30,8 +30,9 @@ abstract class WebsocketWorker extends Socket
                 break;
             }
             if ($read) {
-                $this->decode($this->readBuffer($this->master));
-                var_dump($this->mongodb);
+                $mess = json_decode($this->decode($this->readBuffer($this->master))["payload"]);
+                var_dump($mess);
+                //var_dump(json_decode($mess)->mess);
             }
         }
     }
